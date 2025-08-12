@@ -1,7 +1,14 @@
-import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  BadRequestException,
+  UseInterceptors,
+  Body,
+} from '@nestjs/common';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { JotformService } from './jotform.service';
 import { MyLogger } from 'src/logger/logger';
-import type { JotformWebhookBody } from 'src/interfaces/jotform.types';
+import { type JotformWebhookBody } from 'src/interfaces/jotform.types';
 
 @Controller('jotform')
 export class JotformController {
@@ -10,46 +17,54 @@ export class JotformController {
   constructor(private readonly jotformService: JotformService) {}
 
   /**
-   * Endpoint webhook POST nhận dữ liệu submission từ Jotform
-   * - Kiểm tra tính hợp lệ của dữ liệu đầu vào (submissionID)
-   * - Gọi service để xử lý submission
-   * - Xử lý lỗi và trả về BadRequestException nếu có lỗi
-   * @param body Dữ liệu webhook gửi tới, bao gồm submissionID
-   * @returns { status: string } trả về trạng thái xử lý
-   * @throws BadRequestException nếu dữ liệu đầu vào không hợp lệ hoặc xử lý thất bại
+   * POST /jotform
+   *
+   * Endpoint nhận webhook gửi từ Jotform khi có submission mới.
+   *
+   * @UseInterceptors(AnyFilesInterceptor()) để hỗ trợ nhận payload dạng multipart/form-data kèm file (nếu có).
+   *
+   * @param body Đối tượng chứa payload webhook, kiểu JotformWebhookBody.
+   *
+   * Quy trình xử lý:
+   * - Kiểm tra trường submissionID tồn tại và là chuỗi hợp lệ.
+   * - Gọi service xử lý submission (lấy dữ liệu chi tiết từ Jotform qua API, gửi dữ liệu tới Bitrix24, ghi log).
+   * - Nếu có lỗi trong quá trình lấy hoặc xử lý, ghi log lỗi và trả về lỗi 400 BadRequest.
+   *
+   * @returns Trả về JSON { status: 'ok' } nếu xử lý thành công.
+   *
+   * @throws BadRequestException nếu submissionID không hợp lệ hoặc lỗi trong quá trình xử lý.
    */
   @Post()
+  @UseInterceptors(AnyFilesInterceptor())
   async handleWebhook(
     @Body() body: JotformWebhookBody,
   ): Promise<{ status: string }> {
-    this.logger.log('Webhook received');
+    // Lấy submissionID từ body webhook
+    const submissionId = body.submissionID;
 
-    // Kiểm tra trường submissionID phải tồn tại và là string
-    if (typeof body.submissionID !== 'string') {
-      this.logger.warn('Invalid or missing submissionID in webhook body');
-      throw new BadRequestException('submissionID missing or invalid');
-    }
-
-    const submissionId: string = body.submissionID;
-
-    // Kiểm tra thêm submissionId không rỗng
-    if (!submissionId) {
-      this.logger.warn('Empty submissionID received');
+    // Kiểm tra submissionID phải tồn tại và là string không rỗng
+    if (!submissionId || typeof submissionId !== 'string') {
+      this.logger.warn('Missing or invalid submissionID');
       throw new BadRequestException('Missing or invalid submissionID');
     }
 
     try {
-      // Gọi service xử lý submission (lấy dữ liệu, gửi Bitrix24, ghi log...)
-      await this.jotformService.processSubmission(submissionId);
-      this.logger.log(`Processed submissionID: ${submissionId} successfully`);
+      // Gọi service xử lý submission, bao gồm lấy dữ liệu từ API Jotform và gửi sang Bitrix24
+      const submissionData =
+        await this.jotformService.processSubmission(submissionId);
+
+      // Ghi log thông tin submission nhận được (debug, theo dõi)
+      this.logger.log(
+        `Received submission data: ${JSON.stringify(submissionData)}`,
+      );
     } catch (error) {
-      // Ghi log lỗi và trả lỗi 400 Bad Request cho client webhook
+      // Xử lý lỗi, ghi log chi tiết, trả lỗi cho client webhook
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Error processing submissionID: ${msg}`);
+      this.logger.error(`Error fetching submission data: ${msg}`);
       throw new BadRequestException(msg);
     }
 
-    // Trả về trạng thái thành công cho webhook sender
+    // Trả về thành công cho Jotform biết webhook đã được xử lý
     return { status: 'ok' };
   }
 }

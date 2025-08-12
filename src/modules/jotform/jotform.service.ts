@@ -186,7 +186,6 @@ export class JotformService {
     this.logger.log(`Processing submission ID: ${submissionId}`);
 
     const submission = await this.getSubmission(submissionId);
-
     // answers trong submission có thể là unknown, nên kiểm tra an toàn
     const answersUnknown = (submission as unknown as UnknownRecord).answers;
     if (!isRecord(answersUnknown)) {
@@ -203,17 +202,27 @@ export class JotformService {
      * - 'first' và 'last' (string)
      */
     const getAnswerString = (fieldId: string): string | undefined => {
-      const a = answers[fieldId];
-      if (!isRecord(a)) return undefined;
+      const field = answers[fieldId];
+      if (!isRecord(field)) return undefined;
 
-      if (isString(a.answer)) return a.answer.trim();
-      if (isString(a.full)) return a.full.trim();
+      // Lấy phần 'answer' bên trong field
+      const ans = field.answer;
 
-      const first = a.first;
-      const last = a.last;
-      if (isString(first) || isString(last)) {
-        return `${isString(first) ? first.trim() : ''} ${isString(last) ? last.trim() : ''}`.trim();
+      if (isString(ans)) {
+        return ans.trim();
       }
+
+      if (isRecord(ans)) {
+        // Có thể là { first, last } hoặc { full }
+        if (isString(ans.full)) return ans.full.trim();
+        const first = isString(ans.first) ? ans.first : '';
+        const last = isString(ans.last) ? ans.last : '';
+
+        if (first || last) {
+          return `${first} ${last}`.trim();
+        }
+      }
+
       return undefined;
     };
 
