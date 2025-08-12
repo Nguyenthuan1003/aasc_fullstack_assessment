@@ -1,24 +1,26 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-// jotform.dto.ts
-import { IsObject, IsString, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional } from 'class-validator';
 
-class NameDto {
+export class JotformAnswerName {
+  @IsOptional()
   @IsString()
-  first!: string;
+  first?: string;
 
+  @IsOptional()
   @IsString()
-  last!: string;
+  last?: string;
 }
 
-export class JotformPayloadDto {
-  @ValidateNested()
-  @Type(() => NameDto)
-  q4_name!: NameDto;
+export class JotformAnswer {
+  @IsOptional()
+  answer?: string;
 
-  @IsObject()
-  q6_phoneNumber!: { full: string };
+  @IsOptional()
+  first?: string;
 
-  @IsString()
-  q5_email!: string;
+  @IsOptional()
+  last?: string;
+}
+
+export class JotformSubmission {
+  answers: Record<string, JotformAnswer | JotformAnswerName>;
 }
