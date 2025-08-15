@@ -10,17 +10,22 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { BitrixService } from './bitrix.service';
-import type { BitrixAPIResponse, Contact } from 'src/interface/bitrix.type';
+import type { Contact } from 'src/interface/bitrix.type';
 
 @Controller()
 export class BitrixController {
-  private readonly logger = new Logger(BitrixController.name);
+  private readonly logger = new Logger(BitrixController.name); 
+  // Logger NestJS cơ bản, ghi log console. Có thể thay bằng LoggerService nếu muốn ghi file
 
   constructor(private readonly bitrix: BitrixService) {}
+  // Inject BitrixService để gọi các hàm handleInstall, listContacts...
 
   /**
    * GET /install
-   * Xử lý OAuth flow (code + domain)
+   * ===== OAuth flow =====
+   * - Bitrix redirect user về endpoint này với query: code + domain
+   * - Validate code và domain
+   * - Gọi service.handleInstall() để đổi code lấy token và lưu DB
    */
   @Get('install')
   async installGet(
@@ -35,7 +40,11 @@ export class BitrixController {
 
   /**
    * POST /install
-   * Local App flow (AUTH_ID, REFRESH_ID, AUTH_EXPIRES, DOMAIN)
+   * ===== Local App flow =====
+   * - Local app gửi thông tin AUTH_ID, REFRESH_ID, AUTH_EXPIRES, DOMAIN
+   * - Body có thể là JSON, query cũng được (Bitrix POST gửi kiểu form hoặc query)
+   * - Validate input: tất cả phải là string + AUTH_EXPIRES phải parse được ra number
+   * - Gọi service.handleInstallVN() để lưu token + expires vào DB
    */
   @Post('install')
   async installPost(@Body() body: any, @Req() req: Request) {
@@ -46,7 +55,7 @@ export class BitrixController {
     const refreshIdRaw = bodyObj.REFRESH_ID ?? req.query.REFRESH_ID;
     const expiresRaw = bodyObj.AUTH_EXPIRES ?? req.query.AUTH_EXPIRES;
 
-    // Validate tất cả đều là string
+    // Validate tất cả phải là string
     if (
       typeof domainRaw !== 'string' ||
       typeof authIdRaw !== 'string' ||
@@ -73,16 +82,22 @@ export class BitrixController {
 
   /**
    * GET /contacts
-   * Test gọi API crm.contact.list
+   * ===== Test API Bitrix =====
+   * - Dùng để test gọi crm.contact.list
+   * - portal là domain của Bitrix
+   * - service.listContacts() đã handle token, refresh, call API, xử lý lỗi
+   * - Trả về mảng Contact[]
    */
   @Get('contacts')
   async listContacts(@Query('portal') portal?: string): Promise<Contact[]> {
-    // listContacts đã trả về Contact[]
     return this.bitrix.listContacts(portal);
   }
 
   /**
-   * Health check
+   * GET /health
+   * ===== Health check endpoint =====
+   * - Dùng để kiểm tra server đang live
+   * - Trả về ok + timestamp
    */
   @Get('health')
   health() {
